@@ -1,0 +1,12 @@
+.venv/
+cache/
+data/
+prints/
+__pycache__/
+*.egg-info/
+.pytest_cache/
+.DS_Store
+/result.json
+tools/*.npz
+*.fbx
+*.FBX

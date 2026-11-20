@@ -1,0 +1,162 @@
+<!doctype html>
+<html lang="zh-HK">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>HK3D 微縮模型工坊</title>
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
+<link rel="stylesheet" href="style.css">
+<script type="importmap">
+{ "imports": {
+  "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js",
+  "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/"
+} }
+</script>
+</head>
+<body>
+<header>
+  <div class="brand"><span class="logo">◎</span> HK3D <span class="sub">香港三維微縮模型工坊</span></div>
+  <div id="status" class="status">載入中…</div>
+</header>
+<main>
+  <aside>
+    <section>
+      <h2><span class="n">1</span>地點 Location</h2>
+      <div class="search">
+        <input id="q" type="search" placeholder="搜尋地址或建築物，例如：觀塘碼頭">
+        <ul id="results" hidden></ul>
+      </div>
+      <p class="hint">或直接在地圖上點選中心點，可拖動標記微調。</p>
+      <label class="check small"><input id="snap" type="checkbox"> 點擊建築時自動置中於該建築（地標模式預設開啟）</label>
+      <dl class="coords">
+        <dt>WGS84</dt><dd id="c-wgs">—</dd>
+        <dt>HK1980</dt><dd id="c-hk">—</dd>
+        <dt>圖幅 Sheets</dt><dd id="c-sheets">—</dd>
+      </dl>
+      <div id="nearby" class="nearby" hidden>
+        <p class="hint">附近高樓（本地數據，按樓高排列，點擊置中）</p>
+        <ul id="nearby-list"></ul>
+      </div>
+      <div id="missing" class="missing" hidden>
+        <p id="missing-p">缺少 <b id="missing-list"></b> 的本地數據。</p>
+        <p id="basic-p"><b id="basic-list"></b> 只有無紋理數據（沒有地面、道路、水體細節）。選「有紋理 FBX」可升級。</p>
+        <label>下載版本<select id="dl-format">
+          <option value="FBX0">無紋理 FBX0（約 60 MB／幅）：建築、天橋、DTM 地形</option>
+          <option value="FBX">有紋理 FBX（約 1–2 GB／幅）：另含地面細節、道路、植被、水體</option>
+        </select></label>
+        <button id="dl-btn" class="secondary">從地政總署下載缺少的圖幅</button>
+      </div>
+    </section>
+
+    <section>
+      <h2><span class="n">2</span>範圍與尺寸 Size</h2>
+      <div class="presets">
+        <button type="button" data-preset="landmark" class="chip">地標擺設 Landmark<small>R 100 m · ⌀80 · 精確地標 · 底座環</small></button>
+        <button type="button" data-preset="city" class="chip">城市景觀 City<small>R 300 m · ⌀100 · 標準</small></button>
+      </div>
+      <label class="row">實地半徑 <output id="o-radius"></output>
+        <input id="radius" type="range" min="50" max="1500" step="10" value="300"></label>
+      <div class="grid2">
+        <label>打印直徑 mm<input id="diameter" type="number" min="20" max="2000" step="5" value="100"></label>
+        <label>底座厚度 mm<input id="base_mm" type="number" min="1" max="20" step="0.5" value="3"></label>
+        <label>垂直誇張 ×<input id="z_scale" type="number" min="0.5" max="5" step="0.1" value="1"></label>
+        <label>形狀<select id="shape">
+          <option value="circle">圓形</option><option value="hexagon">六角形</option><option value="square">方形</option>
+        </select></label>
+      </div>
+      <p class="hint" id="scale-hint"></p>
+    </section>
+
+    <section>
+      <h2><span class="n">3</span>圖層 Layers</h2>
+      <div id="layers" class="layers"></div>
+    </section>
+
+    <section>
+      <h2><span class="n">4</span>打印機 Printer</h2>
+      <div class="grid2">
+        <label>噴嘴直徑 mm<input id="nozzle" type="number" min="0.1" max="1.2" step="0.05" value="0.4" list="nozzles"></label>
+        <label>層高 mm<input id="layer_mm" type="number" min="0.02" max="0.8" step="0.02" value="0.2" list="layers-h"></label>
+        <label>線寬 mm<input id="line_mm" type="number" min="0.1" max="1.5" step="0.01" value="0.4"></label>
+        <label>最長橋接 mm<input id="bridge_mm" type="number" min="0" max="50" step="1" value="10"></label>
+        <label>打印範圍 X mm<input id="bed_x" type="number" min="50" max="2000" step="1" value="256"></label>
+        <label>打印範圍 Y mm<input id="bed_y" type="number" min="50" max="2000" step="1" value="256"></label>
+        <label>打印範圍 Z（高）mm<input id="bed_z" type="number" min="50" max="2000" step="1" value="256"></label>
+        <label>定位銷直徑 mm<input id="pin_mm" type="number" min="0" max="5" step="0.05" value="1.75" list="pins"></label>
+      </div>
+      <datalist id="pins"><option value="1.75"></option><option value="2.85"></option><option value="3"></option><option value="0"></option></datalist>
+      <datalist id="nozzles"><option value="0.2"></option><option value="0.25"></option><option value="0.4"></option><option value="0.6"></option><option value="0.8"></option></datalist>
+      <datalist id="layers-h"><option value="0.08"></option><option value="0.12"></option><option value="0.16"></option><option value="0.2"></option><option value="0.28"></option></datalist>
+      <label class="check"><input id="support_free" type="checkbox" checked> 免支撐打印：懸空的底面（懸挑、架空層頂、橋底）若打印機印不出，會在下方補上 45° 斜撐或尖拱；跨度不超過「最長橋接」的頂部保持開空。外牆紋樣的凹位頂部改為 45° 斜面。</label>
+      <label class="check"><input id="tile" type="checkbox" checked> 分塊打印：模型大過打印範圍時（例如把打印直徑放大到 600 mm），自動切成一件件放得進打印機的區塊再拼裝。接縫沿街道繞過建築；太高的建築橫切成幾層；接縫處留有定位銷孔（可用剪短的耗材作銷），每件底部刻上編號，並附拼裝圖。</label>
+      <p class="hint" id="tile-hint" hidden></p>
+      <p class="hint">噴嘴和層高決定模型上最幼的細節：外牆直線至少一個線寬、樓層線至少兩個層高，太細而印不出的紋樣不會畫；尖塔加粗到噴嘴的 1.5 倍，地面上細於噴嘴 0.75 倍的雜訊會移除。改噴嘴會把線寬設為噴嘴直徑、層高設為一半，之後可再自行修改。打算加支撐打印時取消勾選「免支撐打印」。</p>
+    </section>
+
+    <details>
+      <summary>進階設定 Advanced</summary>
+      <div class="grid2">
+        <label>細節 (mm/格)<select id="detail_mm">
+          <option value="0.2">草稿 0.2</option><option value="0.1" selected>標準 0.1</option><option value="0.05">精細 0.05</option>
+        </select></label>
+        <label>最小特徵 mm<input id="min_feature_mm" type="number" min="0" max="2" step="0.05" value="0.3"></label>
+        <label>基準高程 mPD<input id="floor_m" type="number" step="1" placeholder="自動"></label>
+        <label>色層厚度 mm<input id="skin_mm" type="number" min="0.2" max="3" step="0.1" value="0.6"></label>
+        <label>地面降噪 m<input id="ground_clean_m" type="number" min="0" max="10" step="0.5" value="2.5"></label>
+        <label>尖塔最小粗度 mm<input id="spire_mm" type="number" min="0" max="3" step="0.05" value="0.6"></label>
+        <label>保留底層開口 mm<input id="openings_mm" type="number" min="0" max="20" step="0.5" value="1"></label>
+        <label>外牆紋樣深度 mm<input id="facade_relief_mm" type="number" min="0" max="1" step="0.05" value="0"></label>
+        <label>道路下沉（層）<input id="road_recess_layers" type="number" min="0" max="10" step="1" value="1"></label>
+      </div>
+      <p class="hint">地面降噪會去除汽車、灌木、燈柱等小於此尺寸的雜訊；建築物和天橋不受影響。天線和尖塔會加粗到「尖塔最小粗度」（0 = 保持原樣）。建築底層看得穿的開口（騎樓、架空層）和天橋、行車天橋底下的空間，高和闊都達到「保留底層開口」才保留，否則填實（0 = 全部填實）。道路會比旁邊的行人路低「道路下沉」個打印層高，單色打印也看得出街道（0 = 保持實際高度）。尖塔和最小特徵的預設值跟隨「打印機」的噴嘴；樹脂打印可把它們調低。</p>
+      <label class="check"><input id="precise_landmark" type="checkbox"> 精確雕刻：中心建築按外牆方向多角度雕刻，外牆平整、轉角銳利，天線桁架等鏤空保留（較慢，約 1 分鐘）。「外牆紋樣深度」大於 0 時，會從建築貼圖自動辨認斜撐、框架和樓層線，把其間的玻璃凹入（需有紋理 FBX；適用於任何建築，無需逐棟調整）</label>
+      <label class="check"><input id="precise_all" type="checkbox"> 精確雕刻範圍內所有建築，而不只是中心一棟（需先勾選「精確雕刻」；每棟建築約多 10–60 秒）</label>
+      <label class="check"><input id="trim_edge" type="checkbox"> 移除被邊緣切開的高樓（低於地標三成高度的建築保留，中心地標一定保留）</label>
+      <label class="check"><input id="holder" type="checkbox"> 另外輸出展示底座環（模型可嵌入，建議用木紋或深色耗材打印）</label>
+      <label class="check"><input id="multicolor" type="checkbox"> 多色分件（建築／道路／水體／植被分開輸出，適合 AMS／MMU）</label>
+      <label class="check"><input id="engrave" type="checkbox" checked> 底部刻字（名稱、座標、比例、數據來源）</label>
+      <label>名稱（檔名及刻字）<input id="name" type="text" placeholder="例如 樂華邨 Lok Wah"></label>
+    </details>
+
+    <div class="go">
+      <button id="go" class="primary" disabled>生成模型 Generate</button>
+      <div id="prog" class="prog" hidden><div class="bar"><i></i></div><span></span></div>
+      <p id="err" class="err" hidden></p>
+    </div>
+
+    <section id="history-sec" hidden>
+      <h2>最近生成 Recent</h2>
+      <ul id="history" class="history"></ul>
+    </section>
+
+    <section id="out" hidden>
+      <h2><span class="n">5</span>輸出 Output</h2>
+      <dl id="stats" class="stats"></dl>
+      <div id="files" class="files"></div>
+    </section>
+  </aside>
+
+  <div class="stage">
+    <nav class="tabs">
+      <button data-tab="map" class="on">地圖 Map</button>
+      <button data-tab="view">3D 預覽 Preview</button>
+      <span class="spacer"></span>
+      <label class="check small"><input id="imagery" type="checkbox"> 航攝影像</label>
+    </nav>
+    <div id="map" class="pane on"></div>
+    <div id="view" class="pane">
+      <div id="viewer"></div>
+      <div id="legend" class="legend"></div>
+      <p class="empty" id="view-empty">生成模型後在此預覽。</p>
+    </div>
+  </div>
+</main>
+<footer>
+  地圖及三維數據由地政總署提供 · Map &amp; 3D data from
+  <a href="https://api.portal.hkmapservice.gov.hk/disclaimer" target="_blank" rel="noopener">Lands Department</a>
+  · © HKSAR Government
+</footer>
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script type="module" src="app.js"></script>
+</body>
+</html>
